@@ -25,15 +25,40 @@ class Instrumentor {
   Instrumentor(){
     
   }
+
   void malloc(void* ptr, size_t size){
-    overall_allocations += 1;
-    time_t t = time(nullptr);
-    allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
+    if (app_invocation){
+      app_invocation = false;
+      overall_allocations += 1;
+      time_t t = time(nullptr);
+      allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
+      app_invocation = true;
+    } else {
+      fprintf(stderr, "Ignoring malloc instrumentation");
+    }
+  }
+
+  void free(void *ptr) {
+    allocs.erase(ptr);
+  }
+
+  void realloc(void* old_ptr, void * new_ptr, size_t new_size){
+    if (app_invocation){
+      app_invocation = false;
+      allocs.erase(old_ptr);
+      time_t t = time(nullptr);
+      allocs.insert(pair<void*, pair<size_t, time_t>>(new_ptr, {new_size, t}));
+      app_invocation = true;
+    } else {
+      fprintf(stderr, "Ignoring malloc instrumentation");
+    }
   }
 
 private:
   map<void*, pair<size_t, time_t>> allocs;
   uint32_t overall_allocations;
+  // Flag to track calls by instrumentor
+  bool app_invocation = true;
 
 };
 
@@ -65,19 +90,36 @@ static void initialize(void) {
 
 void *malloc(size_t size) {
   initialize();
-  fprintf(stderr, "Malloc %zu\n", size);
+
   void* ptr = orig_malloc_(size);
   
-  // Flag to track invocation by instrumentor
-  static bool app_invocation = true;
+  fprintf(stderr, "Malloc %zu %zu\n", size, (size_t)ptr);
 
-  if (app_invocation && ptr != nullptr) {
-    app_invocation = false;
-    // Any subsequent malloc calls will be made by the instrumentor
+  if (ptr != nullptr) {
     instrumentor.malloc(ptr, size);
-    app_invocation = true;
   }
   
 
   return ptr;
+}
+
+void free(void* ptr){
+  initialize();
+  fprintf(stderr, "Free %zu\n", (size_t)ptr);
+  orig_free_(ptr);
+  instrumentor.free(ptr);
+}
+
+void* realloc(void* ptr, size_t size){
+  initialize();
+  fprintf(stderr, "Realloc %zu %zu\n", (size_t)ptr, size);
+  void * new_ptr = orig_realloc_(ptr, size);
+  instrumentor.realloc(ptr, new_ptr, size);
+}
+
+void* calloc(size_t num, size_t size) {
+  initialize();
+  void* ptr = orig_calloc_(num, size);
+  fprintf(stderr, "calloc %zu\n", (size_t)ptr);
+  instrumentor.malloc(ptr, size);
 }
