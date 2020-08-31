@@ -7,7 +7,7 @@ clean:
 	rm instrumentor.so test_app
 
 test_app: test_app.c
-	gcc -g test_app.c -o test_app
+	gcc -g test_app.c -o test_app -lpthread
 
 instrument: instrumentor.so test_app
 	LD_PRELOAD=$(PWD)/instrumentor.so ./test_app

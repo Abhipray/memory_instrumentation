@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-// #include <mutex>
+#include <mutex>
 
 extern "C" {
 #include "instrumentor.h"
@@ -25,19 +25,15 @@ using namespace std;
 
 class Instrumentor {
  public:
-  Instrumentor() {
-    // app_invocation = false;
-    // fprintf(stderr, "New instrumentors()");
-    // last_print_time = time(nullptr);
-    // app_invocation = true;
-  }
+  Instrumentor() {}
 
   ~Instrumentor() {}
 
   void malloc(void* ptr, size_t size) {
+    lock_guard<recursive_mutex> lk(class_mutex);
+
     if (app_invocation) {
       app_invocation = false;
-      fprintf(stderr, "app malloc %zu", size);
       time_t t = time(nullptr);
       allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
       overall_allocations += 1;
@@ -52,6 +48,7 @@ class Instrumentor {
   }
 
   void realloc(void* old_ptr, void* new_ptr, size_t new_size) {
+    lock_guard<recursive_mutex> lk(class_mutex);
     if (app_invocation) {
       app_invocation = false;
       allocs.erase(old_ptr);
@@ -74,7 +71,7 @@ class Instrumentor {
 
   map<void*, pair<size_t, time_t>> allocs;
   uint32_t overall_allocations = 0;
-  // recursive_mutex class_mutex;
+  recursive_mutex class_mutex;
 
   // Flag to track calls by instrumentor
   volatile bool app_invocation = true;
@@ -222,7 +219,7 @@ orig_malloc_f_type orig_malloc_ = nullptr;
 orig_free_f_type orig_free_ = nullptr;
 orig_calloc_f_type orig_calloc_ = nullptr;
 orig_realloc_f_type orig_realloc_ = nullptr;
-Instrumentor instrumentor;  // = Instrumentor();
+Instrumentor instrumentor;
 }  // namespace
 
 static bool is_initialized_ = false;
