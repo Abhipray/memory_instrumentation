@@ -12,26 +12,35 @@
 #include <stdlib.h>
 #include <time.h>
 
+// #include <mutex>
+
 extern "C" {
 #include "instrumentor.h"
 }
 
 #include <cstring>
-#include <iostream>
 #include <map>
 
 using namespace std;
 
 class Instrumentor {
  public:
-  Instrumentor() { last_print_time = time(nullptr); }
+  Instrumentor() {
+    // app_invocation = false;
+    // fprintf(stderr, "New instrumentors()");
+    // last_print_time = time(nullptr);
+    // app_invocation = true;
+  }
+
+  ~Instrumentor() {}
 
   void malloc(void* ptr, size_t size) {
     if (app_invocation) {
       app_invocation = false;
-      overall_allocations += 1;
+      fprintf(stderr, "app malloc %zu", size);
       time_t t = time(nullptr);
       allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
+      overall_allocations += 1;
       app_invocation = true;
     }
     print_stats();
@@ -65,10 +74,15 @@ class Instrumentor {
 
   map<void*, pair<size_t, time_t>> allocs;
   uint32_t overall_allocations = 0;
+  // recursive_mutex class_mutex;
 
   // Flag to track calls by instrumentor
   volatile bool app_invocation = true;
 
+  /**
+   * @brief Convert byte count into human readable format with a suffix and a
+   * floating point prefix.
+   */
   void human_readable_bytes(uint32_t num_bytes, string* suffix, float* count) {
     static string suffixes[6] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
     *count = num_bytes;
@@ -82,6 +96,11 @@ class Instrumentor {
 
   void print_stats() {
     time_t now = time(nullptr);
+
+    if (last_print_time == 0) {
+      last_print_time = now;
+      return;
+    }
 
     double diff = difftime(now, last_print_time);
     if (diff < print_periodicity_secs) {
@@ -100,6 +119,7 @@ class Instrumentor {
 #undef TIME_STR_LEN
 
     fprintf(stderr, "\n>>>>>>>>>>>>>%s>>>>>>>>>>>>>\n", time_str);
+    fprintf(stderr, "Overall stats:\n");
 
     // Print number of current allocations
     size_t num_curr_allocs = allocs.size();
@@ -202,11 +222,14 @@ orig_malloc_f_type orig_malloc_ = nullptr;
 orig_free_f_type orig_free_ = nullptr;
 orig_calloc_f_type orig_calloc_ = nullptr;
 orig_realloc_f_type orig_realloc_ = nullptr;
-Instrumentor instrumentor;
+Instrumentor instrumentor;  // = Instrumentor();
 }  // namespace
 
 static bool is_initialized_ = false;
 
+/**
+ * @brief Initialize the function pointers for malloc, free, realloc and calloc
+ */
 static void initialize(void) {
   if (!is_initialized_) {
     void* handle = RTLD_NEXT;
@@ -215,7 +238,6 @@ static void initialize(void) {
     orig_calloc_ = (orig_calloc_f_type)dlsym(handle, "calloc");
     orig_realloc_ = (orig_realloc_f_type)dlsym(handle, "realloc");
 
-    instrumentor = Instrumentor();
     is_initialized_ = true;
   }
 }
@@ -256,6 +278,7 @@ void* calloc(size_t num, size_t size) {
       fprintf(stderr, "Could not initialize calloc.");
       exit(1);
     }
+    fprintf(stderr, "using buffer for init");
     return calloc_buffer;
   }
   initialize();
