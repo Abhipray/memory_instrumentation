@@ -13,6 +13,9 @@ int main() {
   malloc(15);
   sleep(5);
   malloc(13);
+  free(ptr);
+  sleep(5);
+  malloc(139);
   // srand(time(NULL));
   // printf("Helloooooo %d!\n", rand());
   // fprintf(stderr, "app exit\n");

@@ -23,15 +23,12 @@ using namespace std;
 
 class Instrumentor {
  public:
-  Instrumentor() {
-    // setlocale(LC_ALL, "en_US.UTF-8");
-    last_print_time = time(nullptr);
-  }
+  Instrumentor() { last_print_time = time(nullptr); }
 
   void malloc(void* ptr, size_t size) {
     if (app_invocation) {
       app_invocation = false;
-      fprintf(stderr, "app malloc %zu %zu\n", size, (size_t)ptr);
+      // fprintf(stderr, "app malloc %zu %zu\n", size, (size_t)ptr);
       overall_allocations += 1;
       time_t t = time(nullptr);
       allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
@@ -62,16 +59,18 @@ class Instrumentor {
   static const uint32_t kNumAgeDistributionBins =
       5;  // Number of bins for allocation age histogram
   static const uint16_t kBarLength = 20;  // In '#' units
+  static const uint16_t print_periodicity_secs = 5;
+
   time_t last_print_time = 0;
 
   map<void*, pair<size_t, time_t>> allocs;
   uint32_t overall_allocations = 0;
+
   // Flag to track calls by instrumentor
   volatile bool app_invocation = true;
 
-  void human_readable_bytes(uint32_t num_bytes, const char** suffix,
-                            float* count) {
-    static const char* suffixes[6] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+  void human_readable_bytes(uint32_t num_bytes, string* suffix, float* count) {
+    static string suffixes[6] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
     *count = num_bytes;
     uint32_t suffix_idx = 0;
     while (*count >= 1024 && suffix_idx < 6) {
@@ -85,7 +84,7 @@ class Instrumentor {
     time_t now = time(nullptr);
 
     double diff = difftime(now, last_print_time);
-    if (diff < 5) {
+    if (diff < print_periodicity_secs) {
       return;
     }
     last_print_time = now;
@@ -142,15 +141,15 @@ class Instrumentor {
         i++;
       }
       time_distribution[i]++;
-      fprintf(stderr, "%lu %lu\n", size, i);
+      // fprintf(stderr, "%lu %lu\n", size, i);
     }
 
     // Size of current total allocated bytes
     float human_readable_count;
-    const char** suffix;
-    human_readable_bytes(num_bytes, suffix, &human_readable_count);
+    string suffix;
+    human_readable_bytes(num_bytes, &suffix, &human_readable_count);
     fprintf(stderr, "%0.1f %s Current total allocated size\n",
-            human_readable_count, *suffix);
+            human_readable_count, suffix.c_str());
 
     // Display bar chart of distribution of allocations by size
     float unit_allocation = (float)num_curr_allocs / (float)kBarLength;
@@ -234,23 +233,20 @@ void* malloc(size_t size) {
   return ptr;
 }
 
-// void free(void* ptr){
-//   initialize();
-//   fprintf(stderr, "Free %zu\n", (size_t)ptr);
-//   orig_free_(ptr);
-//   // instrumentor.free(ptr);
-// }
+void free(void* ptr) {
+  initialize();
+  orig_free_(ptr);
+  instrumentor.free(ptr);
+}
 
-// void* realloc(void* ptr, size_t size){
+// void* realloc(void* ptr, size_t size) {
 //   initialize();
-//   fprintf(stderr, "Realloc %zu %zu\n", (size_t)ptr, size);
-//   void * new_ptr = orig_realloc_(ptr, size);
-//   // instrumentor.realloc(ptr, new_ptr, size);
+//   void* new_ptr = orig_realloc_(ptr, size);
+//   instrumentor.realloc(ptr, new_ptr, size);
 // }
 
 // void* calloc(size_t num, size_t size) {
 //   initialize();
 //   void* ptr = orig_calloc_(num, size);
-//   fprintf(stderr, "calloc %zu\n", (size_t)ptr);
-//   // instrumentor.malloc(ptr, size);
+//   instrumentor.malloc(ptr, size * num);
 // }
