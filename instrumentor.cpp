@@ -22,64 +22,19 @@
 #define _GNU_SOURCE
 #endif
 
+#include "instrumentor.h"
+
 #include <dlfcn.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
 
-#include <mutex>
-
-extern "C" {
-#include "instrumentor.h"
-}
-
 #include <cstring>
 #include <map>
+#include <mutex>
 
 using namespace std;
-
-class Instrumentor {
- public:
-  /**
-   * @brief This should be called when a malloc is requested by the app
-   */
-  void malloc(void* ptr, size_t size);
-
-  /**
-   * @brief This should be called when a malloc is requested by the app
-   */
-  void free(void* ptr);
-
-  /**
-   * @brief This should be called when a realloc is requested by the app
-   */
-  void realloc(void* old_ptr, void* new_ptr, size_t new_size);
-
- private:
-  static const uint32_t kNumSizeDistributionBins =
-      12;  // Number of bins for allocation size histogram
-  static const uint32_t kNumAgeDistributionBins =
-      5;  // Number of bins for allocation age histogram
-  static const uint16_t kBarLength = 20;  // In '#' units
-  static const uint16_t print_periodicity_secs = 5;
-
-  time_t last_print_time = 0;
-  map<void*, pair<size_t, time_t>> allocs;
-  uint32_t overall_allocations = 0;
-  recursive_mutex class_mutex;
-
-  // Flag to track calls by instrumentor
-  volatile bool app_invocation = true;
-
-  /**
-   * @brief Convert byte count into human readable format with a suffix and a
-   * floating point prefix.
-   */
-  void human_readable_bytes(uint32_t num_bytes, string* suffix, float* count);
-
-  void print_stats();
-};
 
 void Instrumentor::malloc(void* ptr, size_t size) {
   lock_guard<recursive_mutex> lk(class_mutex);

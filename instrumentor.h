@@ -1,5 +1,53 @@
 #include <stdlib.h>
 
+#include <cstring>
+#include <map>
+#include <mutex>
+
+using namespace std;
+
+class Instrumentor {
+ public:
+  /**
+   * @brief This should be called when a malloc is requested by the app
+   */
+  void malloc(void* ptr, size_t size);
+
+  /**
+   * @brief This should be called when a malloc is requested by the app
+   */
+  void free(void* ptr);
+
+  /**
+   * @brief This should be called when a realloc is requested by the app
+   */
+  void realloc(void* old_ptr, void* new_ptr, size_t new_size);
+
+ private:
+  static const uint32_t kNumSizeDistributionBins =
+      12;  // Number of bins for allocation size histogram
+  static const uint32_t kNumAgeDistributionBins =
+      5;  // Number of bins for allocation age histogram
+  static const uint16_t kBarLength = 20;  // In '#' units
+  static const uint16_t print_periodicity_secs = 5;
+
+  time_t last_print_time = 0;
+  map<void*, pair<size_t, time_t>> allocs;
+  uint32_t overall_allocations = 0;
+  recursive_mutex class_mutex;
+
+  // Flag to track calls by instrumentor
+  volatile bool app_invocation = true;
+
+  /**
+   * @brief Convert byte count into human readable format with a suffix and a
+   * floating point prefix.
+   */
+  void human_readable_bytes(uint32_t num_bytes, string* suffix, float* count);
+
+  void print_stats();
+};
+
 /**
  * @brief Allocate memory block
  * Allocates a block of size bytes of memory, returning a pointer to the
@@ -18,7 +66,7 @@
  * desired type of data pointer in order to be dereferenceable. If the function
  * failed to allocate the requested block of memory, a null pointer is returned.
  */
-void* malloc(size_t size);
+extern "C" void* malloc(size_t size);
 typedef void* (*orig_malloc_f_type)(size_t size);
 
 /**
@@ -37,7 +85,7 @@ typedef void* (*orig_malloc_f_type)(size_t size);
  * @param ptr Pointer to a memory block previously allocated with malloc, calloc
  * or realloc.
  */
-void free(void* ptr);
+extern "C" void free(void* ptr);
 typedef void (*orig_free_f_type)(void* ptr);
 
 /**
@@ -57,7 +105,7 @@ typedef void (*orig_free_f_type)(void* ptr);
  * @param size Size of each element.
  * @return void*
  */
-void* calloc(size_t num, size_t size);
+extern "C" void* calloc(size_t num, size_t size);
 typedef void* (*orig_calloc_f_type)(size_t num, size_t size);
 
 /**
@@ -78,5 +126,5 @@ typedef void* (*orig_calloc_f_type)(size_t num, size_t size);
  * @param size
  * @return void*
  */
-void* realloc(void* ptr, size_t size);
+extern "C" void* realloc(void* ptr, size_t size);
 typedef void* (*orig_realloc_f_type)(void* ptr, size_t size);
