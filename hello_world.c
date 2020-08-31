@@ -1,5 +1,3 @@
-// https://rafalcieslak.wordpress.com/2013/04/02/dynamic-linker-tricks-using-ld_preload-to-cheat-inject-features-and-investigate-programs/
-
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,17 +5,11 @@
 #include <unistd.h>
 
 int main() {
-  // setlocale(LC_ALL, "en_US.UTF-8");
   fprintf(stderr, "Starting app\n");
-  void* ptr = malloc(1024);
-  malloc(15);
-  sleep(5);
-  malloc(13);
-  free(ptr);
-  sleep(5);
-  malloc(139);
-  // srand(time(NULL));
-  // printf("Helloooooo %d!\n", rand());
-  // fprintf(stderr, "app exit\n");
-  // free(ptr);
+  srand(time(NULL));
+  for (int i = 0; i < 100; i++) {
+    size_t bytes = rand() % 8192;
+    void* ptr = malloc(bytes);
+    sleep(5);
+  }
 }

@@ -1,4 +1,7 @@
+// References:
 // https://blog.kummerlaender.eu/article/notes_on_function_interposition_in_cpp/
+// https://rafalcieslak.wordpress.com/2013/04/02/dynamic-linker-tricks-using-ld_preload-to-cheat-inject-features-and-investigate-programs/
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -8,8 +11,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
-
-#include <vector>
 
 extern "C" {
 #include "instrumentor.h"
@@ -28,7 +29,6 @@ class Instrumentor {
   void malloc(void* ptr, size_t size) {
     if (app_invocation) {
       app_invocation = false;
-      // fprintf(stderr, "app malloc %zu %zu\n", size, (size_t)ptr);
       overall_allocations += 1;
       time_t t = time(nullptr);
       allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
@@ -99,7 +99,7 @@ class Instrumentor {
     strftime(time_str, TIME_STR_LEN, "%c", timeinfo);
 #undef TIME_STR_LEN
 
-    fprintf(stderr, ">>>>>>>>>>>>>%s>>>>>>>>>>>>>\n", time_str);
+    fprintf(stderr, "\n>>>>>>>>>>>>>%s>>>>>>>>>>>>>\n", time_str);
 
     // Print number of current allocations
     size_t num_curr_allocs = allocs.size();
@@ -141,7 +141,6 @@ class Instrumentor {
         i++;
       }
       time_distribution[i]++;
-      // fprintf(stderr, "%lu %lu\n", size, i);
     }
 
     // Size of current total allocated bytes
@@ -194,23 +193,23 @@ class Instrumentor {
       }
       fprintf(stderr, " \n");
     }
+    fflush(stderr);
   }
 };
 
 namespace {
-orig_malloc_f_type orig_malloc_;
-orig_free_f_type orig_free_;
-orig_calloc_f_type orig_calloc_;
-orig_realloc_f_type orig_realloc_;
+orig_malloc_f_type orig_malloc_ = nullptr;
+orig_free_f_type orig_free_ = nullptr;
+orig_calloc_f_type orig_calloc_ = nullptr;
+orig_realloc_f_type orig_realloc_ = nullptr;
 Instrumentor instrumentor;
 }  // namespace
 
 static bool is_initialized_ = false;
 
 static void initialize(void) {
-  // TODO: Convert to define
   if (!is_initialized_) {
-    void* handle = RTLD_NEXT;  // dlopen("libc.so.6",RTLD_LAZY);
+    void* handle = RTLD_NEXT;
     orig_malloc_ = (orig_malloc_f_type)dlsym(handle, "malloc");
     orig_free_ = (orig_free_f_type)dlsym(handle, "free");
     orig_calloc_ = (orig_calloc_f_type)dlsym(handle, "calloc");
@@ -239,14 +238,32 @@ void free(void* ptr) {
   instrumentor.free(ptr);
 }
 
-// void* realloc(void* ptr, size_t size) {
-//   initialize();
-//   void* new_ptr = orig_realloc_(ptr, size);
-//   instrumentor.realloc(ptr, new_ptr, size);
-// }
+void* realloc(void* ptr, size_t size) {
+  initialize();
+  void* new_ptr = orig_realloc_(ptr, size);
+  instrumentor.realloc(ptr, new_ptr, size);
+  return new_ptr;
+}
 
-// void* calloc(size_t num, size_t size) {
-//   initialize();
-//   void* ptr = orig_calloc_(num, size);
-//   instrumentor.malloc(ptr, size * num);
-// }
+// dlsym calls calloc which is needed to acquire original calloc function.
+// https://stackoverflow.com/questions/7910666/problems-with-ld-preload-and-calloc-interposition-for-certain-executables
+static char calloc_buffer[8192];
+
+void* calloc(size_t num, size_t size) {
+  if (orig_calloc_ == nullptr) {
+    // In case this call is from dlsym
+    if (num * size > 8192) {
+      fprintf(stderr, "Could not initialize calloc.");
+      exit(1);
+    }
+    return calloc_buffer;
+  }
+  initialize();
+
+  void* ptr = orig_calloc_(num, size);
+  size_t total_bytes = num * size;
+  if (ptr != nullptr) {
+    instrumentor.malloc(ptr, total_bytes);
+  }
+  return ptr;
+}
