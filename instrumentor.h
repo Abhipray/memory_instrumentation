@@ -23,6 +23,11 @@ class Instrumentor {
    */
   void realloc(void* old_ptr, void* new_ptr, size_t new_size);
 
+  /** Expose methods useful for testing class */
+  void get_alloc_map(map<void*, pair<size_t, time_t>>* allocs);
+  void freeze();
+  void unfreeze();
+
  private:
   static const uint32_t kNumSizeDistributionBins =
       12;  // Number of bins for allocation size histogram
@@ -128,3 +133,7 @@ typedef void* (*orig_calloc_f_type)(size_t num, size_t size);
  */
 extern "C" void* realloc(void* ptr, size_t size);
 typedef void* (*orig_realloc_f_type)(void* ptr, size_t size);
+
+void get_alloc_map(map<void*, pair<size_t, time_t>>* allocs);
+void freeze_instrumentor();
+void unfreeze_instrumentor();

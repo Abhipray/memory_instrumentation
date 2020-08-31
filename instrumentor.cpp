@@ -36,12 +36,19 @@
 
 using namespace std;
 
+void Instrumentor::get_alloc_map(map<void*, pair<size_t, time_t>>* allocs) {
+  *allocs = this->allocs;
+}
+
 void Instrumentor::malloc(void* ptr, size_t size) {
   lock_guard<recursive_mutex> lk(class_mutex);
 
   if (app_invocation) {
     app_invocation = false;
     time_t t = time(nullptr);
+#ifdef DEBUG
+    fprintf(stderr, "app malloc %lu", size);
+#endif
     allocs.insert(pair<void*, pair<size_t, time_t>>(ptr, {size, t}));
     overall_allocations += 1;
     app_invocation = true;
@@ -50,9 +57,16 @@ void Instrumentor::malloc(void* ptr, size_t size) {
 }
 
 void Instrumentor::free(void* ptr) {
+#ifdef DEBUG
+  fprintf(stderr, "app free %lu", (uint64_t)ptr);
+#endif
   allocs.erase(ptr);
   Instrumentor::print_stats();
 }
+
+void Instrumentor::freeze() { app_invocation = false; }
+
+void Instrumentor::unfreeze() { app_invocation = true; }
 
 void Instrumentor::realloc(void* old_ptr, void* new_ptr, size_t new_size) {
   lock_guard<recursive_mutex> lk(class_mutex);
@@ -210,6 +224,14 @@ Instrumentor instrumentor;
 
 static bool is_initialized_ = false;
 
+void get_alloc_map(map<void*, pair<size_t, time_t>>* allocs) {
+  instrumentor.get_alloc_map(allocs);
+}
+
+void freeze_instrumentor() { instrumentor.freeze(); }
+
+void unfreeze_instrumentor() { instrumentor.unfreeze(); }
+
 /**
  * @brief Initialize the function pointers for malloc, free, realloc and calloc
  */
@@ -246,7 +268,9 @@ void free(void* ptr) {
 void* realloc(void* ptr, size_t size) {
   initialize();
   void* new_ptr = orig_realloc_(ptr, size);
-  instrumentor.realloc(ptr, new_ptr, size);
+  if (new_ptr != nullptr) {
+    instrumentor.realloc(ptr, new_ptr, size);
+  }
   return new_ptr;
 }
 
