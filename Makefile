@@ -1,10 +1,10 @@
-default: test_instrumentor test_instrumentor_debug instrumentor.so
+default: test_instrumentor test_app test_instrumentor_debug instrumentor.so
 	
 instrumentor.so: instrumentor.cpp
 	g++ -g -fPIC -shared instrumentor.cpp -o instrumentor.so -ldl
 
 clean:
-	rm instrumentor.so test_app test_instrumentor
+	rm instrumentor.so ./test_app ./test_instrumentor
 
 test_app: test_app.c
 	gcc -g test_app.c -o test_app -lpthread
