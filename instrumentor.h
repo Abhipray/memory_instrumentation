@@ -134,6 +134,7 @@ typedef void* (*orig_calloc_f_type)(size_t num, size_t size);
 extern "C" void* realloc(void* ptr, size_t size);
 typedef void* (*orig_realloc_f_type)(void* ptr, size_t size);
 
+/** Methods for debugging and testing */
 void get_alloc_map(map<void*, pair<size_t, time_t>>* allocs);
 void freeze_instrumentor();
 void unfreeze_instrumentor();
