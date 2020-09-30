@@ -1,7 +1,5 @@
 # Libc memory instrumentation
 
-Author: Abhipray Sahoo (abhiprays@gmail.com)
-
 Shared object (instrumentor.so) that can be used to instrument libc malloc, free, realloc and calloc functions.
 
 # Build and usage
